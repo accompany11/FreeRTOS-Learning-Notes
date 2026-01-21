@@ -1,4 +1,4 @@
-🧪 实验报告：FreeRTOS 任务抢占机制验证
+实验报告：FreeRTOS 任务抢占机制验证
 1. 实验目的
 验证 FreeRTOS 的抢占式调度 (Preemptive Scheduling) 特性。
 
