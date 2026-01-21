@@ -1,74 +1,34 @@
-/**
- * @file    main.c
- * @author  Accompany (GitHub: 你的用户名)
- * @brief   FreeRTOS 任务抢占实验
- * 演示内容：高优先级任务如何通过抢占机制剥夺低优先级任务的 CPU 使用权。
- */
+🧪 实验报告：FreeRTOS 任务抢占机制验证
+1. 实验目的
+验证 FreeRTOS 的抢占式调度 (Preemptive Scheduling) 特性。
 
-#include "FreeRTOS.h"
-#include "task.h"
+观察高优先级任务如何剥夺低优先级任务的 CPU 使用权。
 
-/* 任务句柄 */
-TaskHandle_t TaskHigh_Handler;
-TaskHandle_t TaskLow_Handler;
+理解 vTaskDelay 如何引发任务状态切换。
 
-/* 任务函数声明 */
-void vTaskHigh(void *pvParameters);
-void vTaskLow(void *pvParameters);
+2. 实验原理
+在 FreeRTOS 中，调度器始终确保处于 Ready (就绪态) 的最高优先级任务获得 CPU。
 
-int main(void)
-{
-    // 1. 硬件初始化 (如串口、LED、时钟等)
-    prvSetupHardware(); 
+当 TaskHigh (Priority 3) 调用 vTaskDelay 时，它进入 Blocked (阻塞态)，此时 TaskLow (Priority 2) 获得运行机会。
 
-    // 2. 创建高优先级任务 (Priority = 3)
-    xTaskCreate((TaskFunction_t )vTaskHigh,     
-                (const char* )"TaskHigh",   
-                (uint16_t       )128,           
-                (void* )NULL,          
-                (UBaseType_t    )3,             // 优先级最高
-                (TaskHandle_t* )&TaskHigh_Handler);   
+一旦 vTaskDelay 计时结束，TaskHigh 回到 Ready 状态。由于其优先级更高，内核会立即触发 PendSV 中断进行上下文切换，强行打断 TaskLow。
 
-    // 3. 创建低优先级任务 (Priority = 2)
-    xTaskCreate((TaskFunction_t )vTaskLow,     
-                (const char* )"TaskLow",    
-                (uint16_t       )128,           
-                (void* )NULL,          
-                (UBaseType_t    )2,             // 优先级较低
-                (TaskHandle_t* )&TaskLow_Handler);  
+3. 实验步骤与现象
+代码实现：创建两个任务，优先级分别为 3 和 2。
 
-    // 4. 开启任务调度器
-    vTaskStartScheduler();          
+现象观察：通过串口调试助手查看输出。
 
-    while(1); // 正常情况下不会执行到这里
-}
+预期输出：
 
-/**
- * @brief 高优先级任务
- * @note  每 500ms 打印一次。当它调用 vTaskDelay 时，会进入 Blocked 状态，释放 CPU。
- */
-void vTaskHigh(void *pvParameters)
-{
-    for(;;)
-    {
-        printf("TaskHigh is Running... [High Priority]\r\n");
-        // vTaskDelay 会引起任务切换，此时 TaskLow 才有机会运行
-        vTaskDelay(pdMS_TO_TICKS(500)); 
-    }
-}
+Plaintext
+TaskLow is Running...
+TaskLow is Running...
+TaskHigh is Running... [High Priority]  <-- 每500ms准确出现一次
+TaskLow is Running...
+TaskLow is Running...
+关键发现：无论 TaskLow 是否在执行复杂逻辑，TaskHigh 都能准时“插入”。
 
-/**
- * @brief 低优先级任务
- * @note  这是一个“打工人”任务，只有在高优先级任务休息（阻塞）时才能运行。
- */
-void vTaskLow(void *pvParameters)
-{
-    for(;;)
-    {
-        // 模拟高负载工作
-        printf("TaskLow is Running... [Low Priority]\r\n");
-        
-        /* 注意：如果这里没有延时或者阻塞操作，
-           且 TaskHigh 延时结束，TaskHigh 会立刻抢占此任务 */
-    }
-}
+4. 深度思考
+如果去掉 vTaskDelay 会怎样？ 如果 TaskHigh 不调用阻塞函数，它将永远占据 CPU，TaskLow 会进入“饥饿”状态（Starvation），永远无法运行。
+
+中断的作用： SysTick 中断负责计时，判断延时是否到期；而上下文切换的动作是在 PendSV 中断中完成的。
